@@ -15,3 +15,4 @@ futere tasks:
 - [ ] improve map-building module
 - [ ] rewrite move module to let it at first print ways of moving files
 - [ ] add flag -y for autoagreement
+- [ ] add automatical terminal wrapping
