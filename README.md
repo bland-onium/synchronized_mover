@@ -6,11 +6,12 @@ Code has more than 10 ways of checking files
 AI used only as library - it is stupid to correctly realise this logic
 
 futere tasks:
-- [ ] add commands and flags
-- [ ] add flag -d for debugging (deeper than -v)
-- [ ] add flag -v for verbose 
-- [ ] add arguments for script
+- [x] add commands and flags
+- [x] add flag -d for debugging (deeper than -v)
+- [x] add flag -v for verbose 
+- [x] add arguments for script
 - [ ] add autofilling
 - [ ] add GUI
 - [ ] improve map-building module
 - [ ] rewrite move module to let it at first print ways of moving files
+- [ ] add flag -y for autoagreement
