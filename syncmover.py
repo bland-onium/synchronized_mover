@@ -5,8 +5,11 @@ from pathlib import Path
 import pathlib
 import hashlib
 import shutil
+from sys import argv
+from sys import stdout
 
-dbg = True
+dbg = False
+verb = False
 
 # =========================================================================
 # Архитектура работы:
@@ -45,6 +48,12 @@ def create_file_map(directory):
 
 def print_tree(folders, files, rootpath):
     global dbg
+    if dbg: print(
+        "Entered print_tree...\n"
+        f"folders : {folders}\n"
+        f"files   : {files}\n"
+        f"rootpath: {rootpath}"
+    )
     target_root = os.path.basename(os.path.normpath(rootpath))
     tree = {}
 
@@ -115,11 +124,11 @@ def _log_skip (msg: str) -> None:
         print("\n",msg)
 
 def precheck(source, dest, files, file_mirror, dirmir):
-
+    global dbg
     chk = True
     file = source / files
     mirfile = dirmir / file_mirror
-    print("f:",file, "||m:", mirfile)
+    if dbg: print("f:",file, "||m:", mirfile)
     # Check does files are equal
     if not files == file_mirror:
         _log_error("[ERR] Files has different names")
@@ -173,6 +182,9 @@ def precheck(source, dest, files, file_mirror, dirmir):
     return chk
 
 def aftercheck(final_file, src_file_name, src_size, src_hash):
+    global dbg
+    if dbg: print("Enterint aftercheck module")
+    
     chk = True
     if not final_file.is_file():
         _log_error(f"[ERR] File missing at destination: {final_file}")
@@ -200,9 +212,21 @@ def aftercheck(final_file, src_file_name, src_size, src_hash):
         chk = False
     return chk
 
+def progress_bar(now, total, length=30):
+    global verb
+    global dbg
+    percent = (now / total) * 100
+    filled = int(length * now // total)
+    bar = '█' * filled + '-' * (length - filled)
+    if dbg:
+        stdout.write(f'\033[s\n\r\033[K[{bar}] {round(percent*100)/100}%\n\033[u')
+    elif verb:
+        stdout.write(f'\r[{bar}] {round(percent*100)/100}%\n\033[F')
+    stdout.flush()
 
 def move(source_dirs, mirr_dirs, source_files, mirr_files, dest):
     global dbg
+    global verb
     """
     Попарный перенос:
       - (source_dirs[i], source_files[i])  — источник
@@ -218,6 +242,8 @@ def move(source_dirs, mirr_dirs, source_files, mirr_files, dest):
       • если для mirror_files[j] НЕ нашлось ни одного src_files[i]
         — «в конечном адресе есть файл, которого нет в исходной».
     """
+    if verb:
+        print("Entered Move")
     if dbg:
         print("Entered MOVE")
         print(f"first Source dir: {str(source_dirs[0])}")
@@ -238,7 +264,7 @@ def move(source_dirs, mirr_dirs, source_files, mirr_files, dest):
             _log_error("[ERR] Destination dir not exist")
             return
 
-    if dbg: print("Check does lengths equal...")
+    if dbg or verb: print("Check does lengths equal...")
     if len(source_dirs) != len(source_files):
         _log_error("[ERR] Count of source directories adresses are not equal with count of source files")
         return
@@ -246,11 +272,11 @@ def move(source_dirs, mirr_dirs, source_files, mirr_files, dest):
         _log_error("[ERR] Count of mirror directories adresses are not equal with count of mirror files")
         return
 
-    print("Creating mirror map...")
+    if dbg or verb: print("Creating mirror map...")
     mirror_index: dict[str, list[int]] = {}
     for j, name in enumerate(mirr_files):
         mirror_index.setdefault(name, []).append(j)
-    print(f"Mirror_indexes: {mirror_index}\n")
+    if dbg: print(f"Mirror_indexes: {mirror_index}\n")
 
     # Использованные записи зеркал
     used_mirrors = set()
@@ -258,16 +284,17 @@ def move(source_dirs, mirr_dirs, source_files, mirr_files, dest):
 
     #mirrors_set = set(mirr_files)
 
-    if dbg: print("[MAIN]\tEnter source dir loop...")
+    if dbg or verb: print("[MAIN]\tEnter source dir loop...")
     # i - число, source_directory - директория
     for i, source_directory in enumerate(source_dirs):
+        progress_bar(i, len(source_dirs))
         source = Path(source_dirs[i])
         file = source_files[i]
         src_addr = source / file
         
         if dbg:
             print(
-                f"  i          = {i}\n"
+                f"\033[K  i          = {i}\n"
                 f"  source_dir = {source_directory}\n"
                 f"  file       = {file}\n"
                 f"  merged     = {src_addr}\n"
@@ -313,7 +340,13 @@ def move(source_dirs, mirr_dirs, source_files, mirr_files, dest):
                     f"  destination= {destination_dir}\n"
                     f"  final_file = {final_file}"
                 )
-
+            '''
+            if verb: print(
+                f"  source file: {src_addr}"
+                f"  mirror file: {file_mirror}"
+                f"  final  file: {final_file}"
+                )
+            '''
             if dbg: print("Entering Precheck module...")
             # Предварительная проверка
             # source           - Папка с файлом
@@ -356,7 +389,7 @@ def move(source_dirs, mirr_dirs, source_files, mirr_files, dest):
             try:
                 c = 0
                 #print("POTENTIONALLY FILE IS MOVED")
-                shutil.move(str(src_addr), str(final_file))
+                #shutil.move(str(src_addr), str(final_file))
             except (OSError, shutil.Error) as exc:
                 _log_error(f"[ERR] Move failed: {src_addr} -> {final_file} | {exc}")
                 continue
@@ -368,11 +401,12 @@ def move(source_dirs, mirr_dirs, source_files, mirr_files, dest):
             # src_size   - Размер исходного файла
             # src_hash   - Хэш исходного файла
             # AFTERCHECK - проверяет корректность файла после переноса
+            '''
             if not aftercheck(final_file, file, src_size, src_hash):
                 _log_skp(f"[SKIP] Some of final data not complain")
-            
+            '''
 
-            print(f"   {src_addr} ---> {final_file}\n")
+            if dbg or verb: print(f"   {src_addr} ---> {final_file}")
             used_mirrors.add(j)
             used_sources.add(i)
             moved = True
@@ -380,22 +414,24 @@ def move(source_dirs, mirr_dirs, source_files, mirr_files, dest):
         
         if not moved and candidate:
             _log_skip(f"[SKIP] No valid destination for {source_directory}")
+        
+    progress_bar(len(source_dirs), len(source_dirs))
     
     # Список файлов, которые не были найдены в зеркале
-    print(f"\n Destination has file not present in source: ")
+    print(f"\nDestination has file not found in source (if next is empty, everything is okay): ")
     for j, file_mirror in enumerate(mirr_files):
         if j in used_mirrors:
             continue
         if file_mirror not in set(source_files):
-            print(f"{Path(mirr_dirs[j]) / file_mirror}")
+            print(f"- {Path(mirr_dirs[j]) / file_mirror}")
 
-    print(f"\n Source files has not been moved:")
+    print(f"\nSource files has not been moved (if next is empty, everything is okay):")
     # Список файлов, которые не были перемещены из источника
     for j, file_source in enumerate(source_files):
         if j in used_sources:
             continue
         if file_source not in set(mirr_files):
-            print(f"{Path(source_dirs[i]) / file_source}")
+            print(f"- {Path(source_dirs[i]) / file_source}")
 
     print("Move is finished")
     return
@@ -404,32 +440,110 @@ def move(source_dirs, mirr_dirs, source_files, mirr_files, dest):
 
 
 
-
-def main():
+def main(args):
     global dbg
-    # Debug mode
+    global verb
+    chk = False
+    # Comandlette 
+    if '-h' in args:
+        print(
+            "Usage: python3 syncmover.py /source /mirror /destination\n"
+            "Usage: python3 syncmover.py /mirror /destination\n"
+            "Usage: python3 syncmover.py -d /source /mirror /destination\n"
+            "Usage: python3 syncmover.py -d /mirror /destination\n"
+            "Example: python3 syncmover.py -d /media/usb /home/user1 /home/user2/Downloads\n"
+            "                                   home       mirror         destination     \n"
 
-    # Текущая директория
-    home_directory = os.getcwd()
-    # Директория, с которой берём слепок
-    mirror_directory = "/media/bland/Shared/Uni/test/"
-    # Директория, куда всё складываем
-    # Analysis
-    dest_directory = "/home/bland/Downloads/test-dest"
-    if dbg:
-        print(f"\nExploring home folder:\n{home_directory}")
+            "\nScript works using standard libraries of python and do not require to install anything instead of python\n"
+            "-h - help      . Print this menu\n"
+            "-d - debug mode. Print most of possible data\n"
+            "-v - verbose   . Print some of additive data (less than debug)\n"
+            "Priority: -h > -d > -v\n"
+            )
+        return
+    if ['-d'] in args or dbg:
+        for i in range(len(args)):
+            print(f"args[{i}] = {args[i]}")
+    if '-d' in args or dbg:
+        for i in range(len(args)):
+            print(f"args[{i}] = {args[i]}")
+    #if ['-v'] and ['-d'] in args:
+    #    args.remove("-v")
+    #if '-v' and '-d' in args:
+    #    args.remove('-v')
+
+    # Чек аргументов
+    if len(args) < 3:
+        print("Usage: python3 syncmover.py /source /mirror /destination")
+        print("Usage: python3 syncmover.py /mirror /destination    (source = ./)")
+        print("Usage: python3 syncmover.py -d /source /mirror /destination")
+        print("Usage: python3 syncmover.py -d /mirror /destination    (source = ./)")
+        return
+    if len(args) == 3:
+        home_directory = os.getcwd()
+        mirror_directory = args[1]
+        dest_directory = args[2]
+    if len(args) == 4:
+        if args[1] == '-d' or args[1] == '-v' or args[1] == ['-d'] or args[1] == ['-v']:
+            if args[1] == '-d' or args[1] == ['-d']: dbg = True
+            if args[1] == '-v' or args[1] == ['-v']: verb = True
+            home_directory = os.getcwd()
+            mirror_directory = args[2]
+            dest_directory = args[3]    
+        elif '-d' in args:
+            print("Usage: python3 syncmover.py -d /source /mirror /destination")
+            print("Usage: python3 syncmover.py -d /mirror /destination")
+            return
+        else:
+            home_directory = args[1]
+            mirror_directory = args[2]
+            dest_directory = args[3]
+            
+    if len(args) == 5:
+        if '-d' in args:
+            dbg = True
+        if '-v' in args:
+            verb = True
+        home_directory = args[2]
+        mirror_directory = args[3]
+        dest_directory = args[4]
+    for i in args:
+        try:
+            if i != "-d":
+                Path(i)
+        except (TypeError, ValueError):
+            print(f"Unknown format: {i}")
+            return
+
+    if dbg or chk or verb:
+        print(
+            f"  Home  : {home_directory}\n"
+            f"  Mirror: {mirror_directory}\n"
+            f"  Dest  : {dest_directory}\n"
+            )
+        if chk:
+            print("Script is ready to normal run")
+            return
+    if dbg or verb or chk:
+        print(f"Debug = {dbg}, Verbose = {verb}")
+
+    # Текущая директория  home_directory
+    # Директория, с которой берём слепок   mirror_directory
+    # Директория, куда всё складываем   dest_directory
+    if dbg or verb:
+        print(f"Exploring home folder:\n{home_directory}")
     directories, files = create_file_map(home_directory)
-    if dbg:
+    if dbg or verb:
         print(f"Files found: {len(files)}")
-    print_tree(directories, files, str(home_directory))
+        print_tree(directories, files, str(home_directory))
 
     # Analysis of mirroring directory
-    if dbg:
-        print(f"\nExploring mirror directory:\n{mirror_directory}")
+    if dbg or verb:
+        print(f"Exploring mirror directory:\n{mirror_directory}")
     mirror_dirs, mirr_files = create_file_map(mirror_directory)
-    if dbg:
+    if dbg or verb:
         print(f"Files found: {len(mirr_files)}")
-    print_tree(mirror_dirs, mirr_files, str(mirror_directory))
+        print_tree(mirror_dirs, mirr_files, str(mirror_directory))
 
     
     if dbg:
@@ -448,4 +562,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main(argv)
