@@ -429,10 +429,10 @@ def move(source_dirs, mirr_dirs, source_files, mirr_files, dest, mirror_src):
             # src_size   - Размер исходного файла
             # src_hash   - Хэш исходного файла
             # AFTERCHECK - проверяет корректность файла после переноса
-            '''
+            
             if not aftercheck(final_file, file, src_size, src_hash):
                 _log_skp(f"[SKIP] Some of final data not complain")
-            '''
+            
 
             if dbg or verb: print(f"{i+1}   {src_addr} ---> {final_file}")
             used_mirrors.add(j)
