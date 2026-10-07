@@ -54,58 +54,82 @@ def print_tree(folders, files, rootpath):
         f"files   : {files}\n"
         f"rootpath: {rootpath}"
     )
-    target_root = os.path.basename(os.path.normpath(rootpath))
+
+    if len(folders) != len(files):
+        _log_error("[ERR] Count of files not equal to count of folders")
+        return
+    
+    root = os.path.normpath(rootpath)
+
     tree = {}
+    files_at = {}
+    tree[()] = set()
 
     for folder, file in zip(folders, files):
-        
         try:
-            rel_path = os.path.relpath(folder, rootpath)
+            rel = os.path.relpath(folder, root)
         except ValueError:
             continue
         
-        if rel_path == '.':
-            parts = [target_root]
+        if rel == '.':
+            parts = ()
         else:
-            parts = [target_root] + rel_path.replace('\\','/').split('/')
-            parts = [p for p in parts if p]
+            parts = rel.replace('\\','/')
+            parts = tuple(p for p in rel.split('/') if p and p != '.')
+        
+        if any(p == '..' for p in parts):
+            continue
 
-        for i in range(len(parts) - 1):
-            parent = parts[i]
-            child = parts[i+1]
+        for i in range(len(parts)):
+            parent = parts[:i]
+            child = parts[:i+1]
             if parent not in tree:
                 tree[parent] = set()
             tree[parent].add(child)
         
-        if parts:
-            last_folder = parts[-1]
-            if last_folder not in tree:
-                tree[last_folder] = set()
-            tree[last_folder].add(file)
+        if parts not in files_at:
+            files_at[parts] = set()
+        files_at[parts].add(file)
 
     def print_node(node, prefix="", is_last=True, is_root=False):
         global dbg
+        global verb
         # Определение иконки
-        icon = "📁 " if node in tree else ""
+        if node == ():
+            name = os.path.basename(root) or root
+            icon = "📁 "
+        else:
+            name = node[-1]
+            icon = "📁 " if node in tree else ""
         
         # Формирование префикса для текущей строки
-        if is_root and dbg:
-            print(f"{icon}{node}")
+        if is_root and (dbg or verb):
+            print(f"{icon}{name}")
         else:
             marker = "└── " if is_last else "├── "
-            print(f"{prefix}{marker}{icon}{node}")
+            print(f"{prefix}{marker}{icon}{name}")
         
-        # Если у узла есть потомки, уходим в рекурсию
-        if node in tree:
-            children = sorted(list(tree[node]))
-            # Для потомков корня префикс не увеличивается, для остальных добавляется ветка или пустота
-            next_prefix = "" if is_root else (prefix + ("    " if is_last else "│   "))
-            
-            for index, child in enumerate(children):
-                is_child_last = (index == len(children) - 1)
-                print_node(child, next_prefix, is_child_last, is_root=False)
-    if target_root in tree and dbg == True:
-        print_node(target_root, is_root=True)
+        children_folders = sorted(tree.get(node, ()))
+        children_files = sorted(files_at.get(node, ()))
+        total = len(children_folders) + len(children_files)
+        next_prefix = "" if is_root else (prefix + ("    " if is_last else "│   "))
+        
+        idx = 0
+        for child in children_folders:
+            idx += 1
+            print_node(child, next_prefix, idx == total, False)
+        
+        for f in children_files:
+            idx += 1
+            marker = "└── " if is_last else "├── "
+            # Если у узла есть потомки, уходим в рекурсию
+            if node:
+                full_rel = "/".join(node) + "/" + f
+            else:
+                full_rel = f
+            print(f"{next_prefix}{marker} {full_rel}")
+    if dbg == True or verb == True:
+        print_node(())
 
 def get_sha256(file_path: pathlib.Path) -> str:
     hashsh = hashlib.sha256()
@@ -224,7 +248,7 @@ def progress_bar(now, total, length=30):
         stdout.write(f'\r[{bar}] {round(percent*100)/100}%\n\033[F')
     stdout.flush()
 
-def move(source_dirs, mirr_dirs, source_files, mirr_files, dest):
+def move(source_dirs, mirr_dirs, source_files, mirr_files, dest, mirror_src):
     global dbg
     global verb
     """
@@ -315,9 +339,11 @@ def move(source_dirs, mirr_dirs, source_files, mirr_files, dest):
         for j in candidate:
             dirmir = Path(mirr_dirs[j])
             file_mirror = mirr_files[j]
+            relative_path = dirmir.relative_to(mirror_src)
 
-            destination_dir = dest / dirmir.name
+            destination_dir = dest / relative_path
             final_file = destination_dir / file
+            
 
             if not destination_dir.is_dir():
                 _log_error(f"[ERR] Directory not exists: {destination_dir}")
@@ -335,10 +361,12 @@ def move(source_dirs, mirr_dirs, source_files, mirr_files, dest):
             if dbg:
                 print(
                     f"  j = {j}\n"
-                    f"  mirror_dir = {dirmir}\n"
-                    f"  file_mirr  = {file_mirror}\n"
-                    f"  destination= {destination_dir}\n"
-                    f"  final_file = {final_file}"
+                    f"  relat...path ={relative_path}\n"
+                    f"  dest..._dir  = {destination_dir}\n"
+                    f"  mirror_dir   = {dirmir}\n"
+                    f"  file_mirr    = {file_mirror}\n"
+                    f"  destination  = {destination_dir}\n"
+                    f"  final_file   = {final_file}\n"
                 )
             '''
             if verb: print(
@@ -389,7 +417,7 @@ def move(source_dirs, mirr_dirs, source_files, mirr_files, dest):
             try:
                 c = 0
                 #print("POTENTIONALLY FILE IS MOVED")
-                #shutil.move(str(src_addr), str(final_file))
+                shutil.move(str(src_addr), str(final_file))
             except (OSError, shutil.Error) as exc:
                 _log_error(f"[ERR] Move failed: {src_addr} -> {final_file} | {exc}")
                 continue
@@ -406,7 +434,7 @@ def move(source_dirs, mirr_dirs, source_files, mirr_files, dest):
                 _log_skp(f"[SKIP] Some of final data not complain")
             '''
 
-            if dbg or verb: print(f"   {src_addr} ---> {final_file}")
+            if dbg or verb: print(f"{i+1}   {src_addr} ---> {final_file}")
             used_mirrors.add(j)
             used_sources.add(i)
             moved = True
@@ -524,12 +552,15 @@ def main(args):
         if chk:
             print("Script is ready to normal run")
             return
-    if dbg or verb or chk:
-        print(f"Debug = {dbg}, Verbose = {verb}")
+    print(f"Debug = {dbg}, Verbose = {verb}")
 
-    # Текущая директория  home_directory
-    # Директория, с которой берём слепок   mirror_directory
-    # Директория, куда всё складываем   dest_directory
+    # Текущая директория
+    #home_directory = os.getcwd()
+    # Директория, с которой берём слепок
+    #mirror_directory = "/media/bland/Shared/Uni/test/"
+    # Директория, куда всё складываем
+    # Analysis
+    #dest_directory = "/home/bland/Downloads/test-dest"
     if dbg or verb:
         print(f"Exploring home folder:\n{home_directory}")
     directories, files = create_file_map(home_directory)
@@ -555,7 +586,7 @@ def main(args):
             print(f"{i} mdir {mirror_dirs[i]}, {mirr_files[i]}")
 
     # MOVE
-    move(directories, mirror_dirs, files, mirr_files, dest_directory)
+    move(directories, mirror_dirs, files, mirr_files, dest_directory, mirror_directory)
     
 
     
