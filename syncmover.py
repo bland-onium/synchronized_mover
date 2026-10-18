@@ -546,13 +546,15 @@ def main(args):
 	global dbg
 	global verb
 	chk = False
+	ans = None
+	ans2 = None
 	# Comandlette 
 	if '-h' in args:
 		print(
 			"Usage: python3 syncmover.py /source /mirror /destination\n"
 			"Usage: python3 syncmover.py /mirror /destination\n"
 			"Usage: python3 syncmover.py -d /source /mirror /destination\n"
-			"Usage: python3 syncmover.py -d /mirror /destination\n"
+			"Usage: python3 syncmover.py -v /mirror /destination\n"
 			"Example: python3 syncmover.py -d /media/usb /home/user1 /home/user2/Downloads\n"
 			"								   home	   mirror		 destination	 \n"
 
@@ -560,7 +562,9 @@ def main(args):
 			"-h - help	  . Print this menu\n"
 			"-d - debug mode. Print most of possible data\n"
 			"-v - verbose   . Print some of additive data (less than debug)\n"
-			"Priority: -h > -d > -v\n"
+			"-y - automatical agreement of transportation"
+			
+			"Main condition: last 3 args - home, mirror, dest directories"
 			)
 		return
 	if ['-d'] in args or dbg:
@@ -569,6 +573,17 @@ def main(args):
 	if '-d' in args or dbg:
 		for i in range(len(args)):
 			print(f"args[{i}] = {args[i]}")
+
+	if '-y' in args or ['-y'] in args:
+			ans = 'y'
+			ans2 = 'y'
+	if '-d' in args:
+		dbg = True
+	if '-v' in args:
+		verb = True
+	
+		
+
 	#if ['-v'] and ['-d'] in args:
 	#	args.remove("-v")
 	#if '-v' and '-d' in args:
@@ -576,39 +591,16 @@ def main(args):
 
 	# Чек аргументов
 	if len(args) < 3:
+		print("Usage: python3 syncmover.py -h    - to print help menu")
 		print("Usage: python3 syncmover.py /source /mirror /destination")
 		print("Usage: python3 syncmover.py /mirror /destination	(source = ./)")
 		print("Usage: python3 syncmover.py -d /source /mirror /destination")
 		print("Usage: python3 syncmover.py -d /mirror /destination	(source = ./)")
 		return
-	if len(args) == 3:
-		home_directory = os.getcwd()
-		mirror_directory = args[1]
-		dest_directory = args[2]
-	if len(args) == 4:
-		if args[1] == '-d' or args[1] == '-v' or args[1] == ['-d'] or args[1] == ['-v']:
-			if args[1] == '-d' or args[1] == ['-d']: dbg = True
-			if args[1] == '-v' or args[1] == ['-v']: verb = True
-			home_directory = os.getcwd()
-			mirror_directory = args[2]
-			dest_directory = args[3]	
-		elif '-d' in args:
-			print("Usage: python3 syncmover.py -d /source /mirror /destination")
-			print("Usage: python3 syncmover.py -d /mirror /destination")
-			return
-		else:
-			home_directory = args[1]
-			mirror_directory = args[2]
-			dest_directory = args[3]
-			
-	if len(args) == 5:
-		if '-d' in args:
-			dbg = True
-		if '-v' in args:
-			verb = True
-		home_directory = args[2]
-		mirror_directory = args[3]
-		dest_directory = args[4]
+
+	home_directory = args[-3]
+	mirror_directory = args[-2]
+	dest_directory = args[-1]
 	for i in args:
 		try:
 			if i != "-d":
@@ -660,12 +652,14 @@ def main(args):
 			print(f"{i} mdir {mirror_dirs[i]}, {mirr_files[i]}")
 
 	# MOVE
-	ans = str(input("You want to move files?\ny - yes. Move\tn - no. Print how it would be.\n(y/n) : "))
+	if ans == None:
+			ans = str(input("You want to move files?\ny - yes. Move\tn - no. Print how it would be.\n(y/n) : "))
 	if ans.lower() == 'y':
 		move(directories, mirror_dirs, files, mirr_files, dest_directory, mirror_directory)
 	else:
 		premap(directories, mirror_dirs, files, mirr_files, dest_directory, mirror_directory)
-		ans2 = str(input("Now you want to move files? (y/n) "))
+		if ans2 == None:
+			ans2 = str(input("Now you want to move files? (y/n) "))
 		if ans2.lower() == 'y':
 			move(directories, mirror_dirs, files, mirr_files, dest_directory, mirror_directory)
 
