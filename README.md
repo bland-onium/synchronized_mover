@@ -5,7 +5,8 @@ This script are used to move data from one place to another looking on structure
 Now has 90% accuracy. with errors i'm working...
 
 ### HOW IT WORKS
-Usage: python3 syncmover -v -d -y /.../home_directory /.../mirror_directory /.../destination_directory
+Usage: `python3 syncmover -v -d -y /.../home_directory /.../mirror_directory /.../destination_directory`
+
 Program scans home and mirroring directories, builds their file maps and begin to transfer.
 Due transfering each element goes througs predictive check (before move) and "aftercheck" (after move)
 About errors and unknown mistakes program tells after all
