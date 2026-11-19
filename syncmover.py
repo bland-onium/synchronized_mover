@@ -30,6 +30,7 @@ verb = False
 # 
 # =========================================================================
 
+# Создаёт "карту" файлов. На выходе получаются 2 одинаковых массива - директории и файлы, которые внутри
 def create_file_map(directory):
 	dirs = []
 	files = []
@@ -40,12 +41,15 @@ def create_file_map(directory):
 		_log_error(f"[ERR] Dir '{directory}' not found")
 		return dirs, files
 	
+	# Делаем полный прогон по всем файлам и директориям конечной точки
 	for i in path.rglob('*'):
 		if i.is_file():
 			dirs.append(str(i.parent))
 			files.append(i.name)
 	return dirs, files
 
+# Рисует дерево из файлов и директорий, используя за основу 2 массива из предыдущей функции
+# (несёт исключительно демонстрационную цель)
 def print_tree(folders, files, rootpath):
 	global dbg
 	if dbg: print(
@@ -58,19 +62,21 @@ def print_tree(folders, files, rootpath):
 	if len(folders) != len(files):
 		_log_error("[ERR] Count of files not equal to count of folders")
 		return
-	
+	# Получим нормальный path от корневой папки
 	root = os.path.normpath(rootpath)
 
 	tree = {}
 	files_at = {}
 	tree[()] = set()
 
+	# Через zip "склеиваем" папки и файлы в связки
 	for folder, file in zip(folders, files):
 		try:
 			rel = os.path.relpath(folder, root)
 		except ValueError:
 			continue
 		
+		# Отработка относительных путей (иначе он начнёт сканить весь диск)
 		if rel == '.':
 			parts = ()
 		else:
@@ -91,6 +97,7 @@ def print_tree(folders, files, rootpath):
 			files_at[parts] = set()
 		files_at[parts].add(file)
 
+	# Функция для красивого вывода ноды дерева
 	def print_node(node, prefix="", is_last=True, is_root=False):
 		global dbg
 		global verb
@@ -109,6 +116,7 @@ def print_tree(folders, files, rootpath):
 			marker = "└── " if is_last else "├── "
 			print(f"{prefix}{marker}{icon}{name}")
 		
+		# Немного играемся с длиной файлов, чтобы адекватнее помещать в терминале
 		children_folders = sorted(tree.get(node, ()))
 		children_files = sorted(files_at.get(node, ()))
 		total = len(children_folders) + len(children_files)
@@ -131,22 +139,25 @@ def print_tree(folders, files, rootpath):
 	if dbg == True or verb == True:
 		print_node(())
 
+# Функция для возвращения SHA-256
+# Нужна при проверке файлов на целостность
 def get_sha256(file_path: pathlib.Path) -> str:
 	hashsh = hashlib.sha256()
 	with open(file_path, "rb") as f:
 		for byte_block in iter(lambda: f.read(4096), b""):
 			hashsh.update(byte_block)
 	return hashsh.hexdigest()
-
+# Логируем ошибки
 def _log_error(msg: str) -> None:
 	global dbg
 	if dbg:
 		print("\n",msg)
+# Логируем игноры
 def _log_skip (msg: str) -> None:
 	global dbg
 	if dbg:
 		print("\n",msg)
-
+# Предподготовка к переносу. Проверяет файл на налчие явных нюансов или проблем
 def precheck(source, dest, files, file_mirror, dirmir):
 	global dbg
 	chk = True
@@ -310,7 +321,7 @@ def move(source_dirs, mirr_dirs, source_files, mirr_files, dest, mirror_src):
 	# Использованные записи зеркал
 	used_mirrors = set()
 	used_sources = set()
-	err_filenames = set()
+	err_filenames = []
 	err_dirs = []
 	maxlen = 0
 	#mirrors_set = set(mirr_files)
@@ -339,7 +350,7 @@ def move(source_dirs, mirr_dirs, source_files, mirr_files, dest, mirror_src):
 				f"[SKIP] No mirroring destination for {source_directory}" 
 				f"(source: {src_addr})"
 			)
-			err_filenames.add(i)
+			err_filenames.append(i)
 			err_dirs.append([source_dirs[i], "not found"])
 			continue
 		if dbg:
@@ -393,7 +404,7 @@ def move(source_dirs, mirr_dirs, source_files, mirr_files, dest, mirror_src):
 			# file_mirror	  - Файл зеркала
 			# dirmir		   - Папка зеркала
 			if not precheck(source, destination_dir, file, file_mirror, dirmir):
-				err_filenames.add(i)
+				err_filenames.append(i)
 				err_dirs.append([source_dirs[i], mirr_dirs[j]])
 				continue
 			if dbg: print("Precheck passed successfully")
@@ -401,7 +412,7 @@ def move(source_dirs, mirr_dirs, source_files, mirr_files, dest, mirror_src):
 			# Скип в случае нахождения совпадения
 			if final_file.exists():
 				_log_skip(f"[SKIP] Destination has unknown file: {final_file}")
-				err_filenames.add(i)
+				err_filenames.append(i)
 				err_dirs.append([source_dirs[i], mirr_dirs[j]])
 				continue
 
@@ -421,7 +432,7 @@ def move(source_dirs, mirr_dirs, source_files, mirr_files, dest, mirror_src):
 
 			except OSError as exc:
 				_log_error(f"[ERR] Cant read source {src_addr}: {exc}")
-				err_filenames.add(i)
+				err_filenames.append(i)
 				err_dirs.append([source_dirs[i], mirr_dirs[j]])
 				continue
 			
@@ -436,7 +447,7 @@ def move(source_dirs, mirr_dirs, source_files, mirr_files, dest, mirror_src):
 				shutil.move(str(src_addr), str(final_file))
 			except (OSError, shutil.Error) as exc:
 				_log_error(f"[ERR] Move failed: {src_addr} -> {final_file} | {exc}")
-				err_filenames.add(i)
+				err_filenames.append(i)
 				err_dirs.append([source_dirs[i], mirr_dirs[j]])
 				continue
 			
@@ -450,8 +461,8 @@ def move(source_dirs, mirr_dirs, source_files, mirr_files, dest, mirror_src):
 			
 			
 			if not aftercheck(final_file, file, src_size, src_hash):
-				used_filenames.add(i)
-				_log_skp(f"[SKIP] Some of final data not complain")
+				used_sources.add(i)
+				_log_skp("[SKIP] Some of final data not complain")
 			
 
 			if dbg or verb: print(f"{i+1}   {src_addr}{' '*(maxlen-len(str(src_addr)))} ---> {final_file}")
@@ -467,31 +478,157 @@ def move(source_dirs, mirr_dirs, source_files, mirr_files, dest, mirror_src):
 	
 	# Список файлов, которые не были найдены в зеркале
 	print(f"\nDestination has file not found in source (if next is empty, everything is okay): ")
+	source_set = set(source_files)
 	for j, file_mirror in enumerate(mirr_files):
 		if j in used_mirrors:
 			continue
-		if file_mirror not in set(source_files):
+		if file_mirror not in source_set:
 			print(f"- {Path(mirr_dirs[j]) / file_mirror}")
+	
 
 	print(f"\nSource files has not been moved (if next is empty, everything is okay):")
 	# Список файлов, которые не были перемещены из источника
+	source_set = set(mirr_files)
 	for j, file_source in enumerate(source_files):
 		if j in used_sources:
 			continue
-		if file_source not in set(mirr_files):
+		if file_source not in source_set:
 			print(f"- {Path(source_dirs[j]) / file_source}")
 	
 	print(f"\nSource filenames which called error or skip")
 	for j in range(len(err_filenames)):
 		print(
 			f"File  :  {err_filenames[j]}\n"
-			f"Source:  {err_dirs[0][j]}\n"
-			f"Mirror:  {err_dirs[1][j]}\n"
+			f"Source:  {err_dirs[j]}\n"
+			f"Mirror:  {err_dirs[j]}\n"
 		)
 
 	progress_bar(len(source_dirs), len(source_dirs))
 	print("Move is finished")
-	return
+	return used_mirrors, used_sources
+
+def copy_unmoved_mirror_files(mirr_dirs, mirr_files, dest, mirror_src,
+                              used_mirrors=None, verify=True):
+    global dbg, verb
+
+    pairs, errors = build_copy_map(
+        mirr_dirs, mirr_files, dest, mirror_src, used_mirrors
+    )
+
+    for msg, a, b in errors:
+        _log_error(f"{msg}: {a}")
+
+    dest = Path(dest)
+    if not dest.is_dir():
+        try:
+            dest.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            _log_error(f"[ERR] Cannot create destination dir {dest}: {exc}")
+            return False
+
+    total   = len(pairs)
+    copied  = 0
+    skipped = 0
+    failed  = 0
+
+    for k, (src, dst) in enumerate(pairs):
+        progress_bar(k, total)
+
+        # Страховка: в dest уже что-то есть — не перезаписываем.
+        # (в норме этого не должно быть, т.к. slot'ы move() мы отфильтровали)
+        if dst.exists():
+            _log_skip(f"[SKIP] Destination already exists: {dst}")
+            skipped += 1
+            continue
+
+		# Место копирования файла
+        try:
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            src_size = src.stat().st_size
+            src_hash = get_sha256(src)
+            shutil.copy2(str(src), str(dst))
+        except (OSError, shutil.Error) as exc:
+            _log_error(f"[ERR] Copy failed: {src} -> {dst} | {exc}")
+            failed += 1
+            continue
+
+        if verify and not aftercheck(dst, dst.name, src_size, src_hash):
+            _log_error(f"[ERR] After-copy check failed: {dst}")
+            failed += 1
+            continue
+
+        copied += 1
+        if dbg or verb:
+            print(f"[COPY] {src} ---> {dst}")
+
+    progress_bar(total, total)
+
+    if dbg or verb:
+        print(f"\n[COPY] copied={copied}, skipped={skipped}, errors={failed}")
+
+    return failed == 0
+
+def build_copy_map(mirr_dirs, mirr_files, dest, mirror_src,
+                   used_mirrors=None):
+    """
+    Строит список пар (источник_в_mirror, приёмник_в_dest)
+    для тех mirror-записей, которые НЕ были использованы move().
+
+    Возвращает (pairs, errors).
+    """
+    if used_mirrors is None:
+        used_mirrors = set()
+
+    dest = Path(dest)
+    mirror_src = Path(mirror_src)
+
+    pairs  = []
+    errors = []
+
+    if len(mirr_dirs) != len(mirr_files):
+        errors.append((
+            "[ERR] mirror_dirs/mirr_files length mismatch",
+            None, None
+        ))
+        return pairs, errors
+
+    for j, (mdir, mfile) in enumerate(zip(mirr_dirs, mirr_files)):
+        if j in used_mirrors:
+            # move() уже положил сюда файл из home — не трогаем
+            continue
+
+        src = Path(mdir) / mfile
+
+        try:
+            rel = Path(mdir).relative_to(mirror_src)
+        except ValueError:
+            errors.append((
+                "[ERR] mirror dir outside mirror_src",
+                src, None
+            ))
+            continue
+
+        dst = dest / rel / mfile
+        pairs.append((src, dst))
+
+    return pairs, errors
+
+def premap_copy(mirr_dirs, mirr_files, dest, mirror_src,
+                used_mirrors=None):
+    pairs, errors = build_copy_map(
+        mirr_dirs, mirr_files, dest, mirror_src, used_mirrors
+    )
+
+    maxlen = max((len(str(s)) for s, _ in pairs), default=0)
+
+    for i, (src, dst) in enumerate(pairs, 1):
+        print(f"{i:<4} {str(src):<{maxlen}} ---> {dst}")
+
+    for msg, a, b in errors:
+        print(f"{msg}: {a}")
+
+    print(f"\nTotal to copy: {len(pairs)}")
+    return pairs
 
 def premap(source_dirs, mirr_dirs, source_files, mirr_files, dest, mirror_src):
 	global dbg
@@ -546,8 +683,10 @@ def main(args):
 	global dbg
 	global verb
 	chk = False
-	ans = None
+	ans1 = None
 	ans2 = None
+	ans3 = None
+	ans4 = None
 	# Comandlette 
 	if '-h' in args:
 		print(
@@ -567,20 +706,26 @@ def main(args):
 			"Main condition: last 3 args - home, mirror, dest directories"
 			)
 		return
+	start = 1
 	if ['-d'] in args or dbg:
 		for i in range(len(args)):
 			print(f"args[{i}] = {args[i]}")
+		start += 1
 	if '-d' in args or dbg:
 		for i in range(len(args)):
 			print(f"args[{i}] = {args[i]}")
+		start+=1
 
 	if '-y' in args or ['-y'] in args:
-			ans = 'y'
-			ans2 = 'y'
+		ans = 'y'
+		ans2 = 'y'
+		ans3 = 'y'
+		start+=1
 	if '-d' in args:
 		dbg = True
 	if '-v' in args:
 		verb = True
+		start += 1
 	
 		
 
@@ -591,14 +736,15 @@ def main(args):
 
 	# Чек аргументов
 	if len(args) < 3:
-		print("Usage: python3 syncmover.py -h    - to print help menu")
+		print("Usage: python3 syncmover.py -h    							- to print help menu")
 		print("Usage: python3 syncmover.py /source /mirror /destination")
 		print("Usage: python3 syncmover.py /mirror /destination	(source = ./)")
-		print("Usage: python3 syncmover.py -d /source /mirror /destination")
-		print("Usage: python3 syncmover.py -d /mirror /destination	(source = ./)")
 		return
-
-	home_directory = args[-3]
+	print("len - start =", len(args) - start)
+	if len(args) - start < 3:
+		home_directory = Path.cwd()
+	else:
+		home_directory = args[-3]
 	mirror_directory = args[-2]
 	dest_directory = args[-1]
 	for i in args:
@@ -650,21 +796,107 @@ def main(args):
 		print("\nMirrors")
 		for i in range(len(mirror_dirs)):
 			print(f"{i} mdir {mirror_dirs[i]}, {mirr_files[i]}")
-
+	#
 	# MOVE
-	if ans == None:
-			ans = str(input("You want to move files?\ny - yes. Move\tn - no. Print how it would be.\n(y/n) : "))
-	if ans.lower() == 'y':
-		move(directories, mirror_dirs, files, mirr_files, dest_directory, mirror_directory)
+	#
+	if ans1 == None:
+			ans1 = str(input("You want to move files?\ny - yes. Move\tn - no. Print how it would be.\n(y/n) : "))
+	if ans1.lower() == 'y' or ans1.lower() == 'yes':
+		move_result = move(
+				directories, 
+				mirror_dirs, 
+				files, 
+				mirr_files, 
+				dest_directory, 
+				mirror_directory
+			)
+		if move_result is None:
+			print("[WARN] move() returned None; copy skipped")
+			return
+		else:
+			used_mirrors, used_sources = move_result
+			if ans3 == None:
+				ans3 = str(input("\n\n\nYou want to copy files from mirror to destination? (y/n) : "))
+			if ans3.lower() == 'y' or ans3.lower() == 'yes':
+				copy_unmoved_mirror_files(
+						mirror_dirs,
+						mirr_files,
+						dest_directory,
+						mirror_directory,
+						used_mirrors
+					)
+			else:
+				premap_copy(
+					mirror_dirs,
+					mirr_files,
+					dest_directory,
+					mirror_directory,
+					used_mirrors
+				)
+				if ans4 == None:
+					ans4 = str(input("Now you want to copy? (y/n) : "))
+				if ans4.lower() == 'y' or ans4.lower() == 'yes':
+					copy_unmoved_mirror_files(
+						mirror_dirs,
+						mirr_files,
+						dest_directory,
+						mirror_directory,
+						used_mirrors
+					)
+				else:
+					return
 	else:
-		premap(directories, mirror_dirs, files, mirr_files, dest_directory, mirror_directory)
+		premap(
+				directories, 
+				mirror_dirs, 
+				files, 
+				mirr_files, 
+				dest_directory, 
+				mirror_directory
+			)
 		if ans2 == None:
-			ans2 = str(input("Now you want to move files? (y/n) "))
-		if ans2.lower() == 'y':
-			move(directories, mirror_dirs, files, mirr_files, dest_directory, mirror_directory)
-
-	
-
+			ans2 = str(input("Now you want to move files? (y/n) : "))
+		if ans2.lower() == 'y' or ans2.lower() == 'yes':
+			move_result = move(
+				directories, 
+				mirror_dirs, 
+				files, 
+				mirr_files, 
+				dest_directory, 
+				mirror_directory
+			)
+			if move_result is None:
+				print("[WARN] move() returned None; copy skipped")
+				return
+			else:
+				if ans3.lower() == 'y' or ans3.lower() == 'yes':
+					copy_unmoved_mirror_files(
+							mirror_dirs,
+							mirr_files,
+							dest_directory,
+							mirror_directory,
+							used_mirrors
+						)
+				else:
+					premap_copy(
+						mirror_dirs,
+						mirr_files,
+						dest_directory,
+						mirror_directory,
+						used_mirrors
+					)
+					if ans4 == None:
+						ans4 = str(input("Now you want to copy? (y/n) : "))
+					if ans4.lower() == 'y' or ans4.lower() == 'yes':
+						copy_unmoved_mirror_files(
+							mirror_dirs,
+							mirr_files,
+							dest_directory,
+							mirror_directory,
+							used_mirrors
+						)
+					else:
+						return
 
 if __name__ == "__main__":
 	main(argv)
