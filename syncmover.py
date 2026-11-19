@@ -462,7 +462,7 @@ def move(source_dirs, mirr_dirs, source_files, mirr_files, dest, mirror_src):
 			
 			if not aftercheck(final_file, file, src_size, src_hash):
 				used_sources.add(i)
-				_log_skp("[SKIP] Some of final data not complain")
+				_log_skip("[SKIP] Some of final data not complain")
 			
 
 			if dbg or verb: print(f"{i+1}   {src_addr}{' '*(maxlen-len(str(src_addr)))} ---> {final_file}")
@@ -506,6 +506,82 @@ def move(source_dirs, mirr_dirs, source_files, mirr_files, dest, mirror_src):
 	progress_bar(len(source_dirs), len(source_dirs))
 	print("Move is finished")
 	return used_mirrors, used_sources
+
+def move_remaining_sources(source_dirs, source_files, dest, used_sources,
+                           source_root, verify=True):
+    """
+    Переносит все ещё лежащие в source файлы (кроме ушедших в dest через move())
+    в <dest>/not_found/<relative_path>. Без вопросов, без premap.
+    Precheck: существует / это файл / читается.
+    Aftercheck: имя + размер + хэш после переноса.
+    """
+    global dbg, verb
+
+    source_root    = Path(source_root)
+    dest_not_found = Path(dest) / "not_found"
+    used_sources   = used_sources or set()
+
+    # --- Precheck: собираем кандидатов ---
+    to_move = []
+    for i, (sdir, sfile) in enumerate(zip(source_dirs, source_files)):
+        if i in used_sources:
+            continue
+        src = Path(sdir) / sfile
+        if not src.exists():
+            _log_skip(f"[SKIP] Gone: {src}")
+            continue
+        if not src.is_file():
+            _log_skip(f"[SKIP] Not a file: {src}")
+            continue
+        try:
+            sz = src.stat().st_size
+            _  = get_sha256(src)      # тест на читаемость
+        except OSError as exc:
+            _log_error(f"[ERR] Unreadable {src}: {exc}")
+            continue
+        try:
+            rel = src.relative_to(source_root)
+        except ValueError:
+            _log_error(f"[ERR] {src} outside {source_root}")
+            continue
+        to_move.append((src, rel, sz))
+
+    if not to_move:
+        print("\n[not_found] No unmoved source files — nothing to move.")
+        return True
+
+    print(f"\n[not_found] {len(to_move)} unmoved source file(s) -> {dest_not_found}")
+
+    try:
+        dest_not_found.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        _log_error(f"[ERR] Cannot create {dest_not_found}: {exc}")
+        return False
+
+    moved = skipped = failed = 0
+    for src, rel, sz in to_move:
+        final = dest_not_found / rel
+        if final.exists():
+            print(f"  [SKIP] already exists: {final}")
+            skipped += 1
+            continue
+        try:
+            final.parent.mkdir(parents=True, exist_ok=True)
+            src_hash = get_sha256(src)
+            shutil.move(str(src), str(final))
+        except (OSError, shutil.Error) as exc:
+            print(f"  [ERR]  {src} -> {final} | {exc}")
+            failed += 1
+            continue
+        if verify and not aftercheck(final, final.name, sz, src_hash):
+            print(f"  [ERR]  aftercheck failed: {final}")
+            failed += 1
+            continue
+        print(f"  {src} ---> {final}")
+        moved += 1
+
+    print(f"[not_found] moved={moved}, skipped={skipped}, failed={failed}")
+    return failed == 0
 
 def copy_unmoved_mirror_files(mirr_dirs, mirr_files, dest, mirror_src,
                               used_mirrors=None, verify=True):
@@ -813,8 +889,15 @@ def main(args):
 		if move_result is None:
 			print("[WARN] move() returned None; copy skipped")
 			return
+		used_mirrors, used_sources = move_result
+		move_remaining_sources(
+			directories,
+			files,
+			dest_directory,
+			used_sources,
+			home_directory
+		)
 		else:
-			used_mirrors, used_sources = move_result
 			if ans3 == None:
 				ans3 = str(input("\n\n\nYou want to copy files from mirror to destination? (y/n) : "))
 			if ans3.lower() == 'y' or ans3.lower() == 'yes':
@@ -864,6 +947,14 @@ def main(args):
 				mirr_files, 
 				dest_directory, 
 				mirror_directory
+			)
+			used_mirrors, used_sources = move_result
+			move_remaining_sources(
+				directories,
+				files,
+				dest_directory,
+				used_sources,
+				home_directory
 			)
 			if move_result is None:
 				print("[WARN] move() returned None; copy skipped")
