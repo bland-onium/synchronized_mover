@@ -1,11 +1,18 @@
 **ALERT** Tested only on linux. Use at Windows by your aware
 
 # synchronized_mover
-This script are used to move data from one place to another looking on structure of third (like a robocopy or rsync but it mimics data structure of another source). Uses python and included libraries.
-Now has 90% accuracy. with errors i'm working...
+This script are used to move data from one place to another looking on structure of third (like a robocopy or rsync but it mimics data structure of another source). Uses python 3.10+ and included libraries.
+Last update brought more visualisation and mechanism of copying
 
 ### HOW IT WORKS
 Usage: `python3 syncmover -v -d -y /.../home_directory /.../mirror_directory /.../destination_directory`
+`
+Help and flags:
+-h - help
+-y - agree with ewerything
+-v - verbose
+-d - debug
+`
 
 Program scans home and mirroring directories, builds their file maps and begin to transfer.
 Due transfering each element goes througs predictive check (before move) and "aftercheck" (after move)
@@ -18,14 +25,14 @@ It was hard to describe and imagine but i did it.
 Code has more than 10 ways of checking files
 AI used only as library - it is stupid to correctly realise this logic
 
-futere tasks:
+future tasks:
 - [x] add commands and flags
 - [x] add flag -d for debugging (deeper than -v)
 - [x] add flag -v for verbose 
 - [x] add arguments for script
 - [x] add autofilling
 - [ ] add GUI
-- [ ] add erroring automove
+- [x] add erroring automove
 - [ ] improve erroring mechanics
 - [x] improve map-building module
 - [x] rewrite move module to let it at first print ways of moving files
